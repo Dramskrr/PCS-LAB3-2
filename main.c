@@ -15,7 +15,7 @@ const int DEFAULT_HW_THREADS = 1;
 int* CreateArray(const int SIZE) {
     int* int_array = (int*) malloc(sizeof(int) * SIZE);
     for (int i = 0; i < SIZE; i++) {
-        int_array[i] = rand();
+        int_array[i] = rand()%100;
     }
     return int_array;
 }
@@ -24,6 +24,7 @@ void PrintArray(const int* array, const int SIZE) {
     for (int i = 0; i < SIZE; i++) {
         printf("%d ",array[i]);
     }
+    printf("\n");
 }
 
 int GetEnvArraySize() {
@@ -45,6 +46,9 @@ int GetEnvHwThreads() {
     int hw_thread_int = DEFAULT_HW_THREADS;
     if (hw_thread_char != NULL) {
         hw_thread_int = atoi(hw_thread_char);
+        if (hw_thread_int <= 0 || (hw_thread_int & (hw_thread_int - 1)) != 0) {
+            return -1;
+        }
     } else {
         printf(
             "Переменная среды HW_THREADS не получена, "
@@ -68,21 +72,29 @@ int GetEnvRuns() {
     return runs_int;
 }
 
-int64_t SumElementsOfArray(const int* array, const int SIZE) {
-    int64_t result = 0;
-    for (int i = 0; i < SIZE; i++) {
-        result += array[0];
-    }
-    return result;
+void swap(int* arr, const int i, const int j) {
+    int temp = arr[i];
+    arr[i] = arr[j];
+    arr[j] = temp;
 }
 
-int64_t SumElementsOfArrayINT64(const int64_t* array, const int SIZE) {
-    int64_t result = 0;
-    for (int i = 0; i < SIZE; i++) {
-        result += array[0];
+void BubbleSort(int* arr, const int size) {
+    for (int i = 0; i < size - 1; i++) {
+        for (int j = 0; j < size - i - 1; j++) {
+            if (arr[j] > arr[j + 1])
+                swap(arr, j, j + 1);
+        }
     }
-    
-    return result;
+}
+
+void CheckSort(int* arr, const int size) {
+    for (int i = 0; i < size-1; i++) {
+        if (arr[i] > arr[i+1]) {
+            printf("Массив отсортирован неправильно!\n");
+            return;
+        }
+    }
+    printf("Сортировка успешна \n");
 }
 
 int main(int argc, char** argv) {
@@ -98,6 +110,9 @@ int main(int argc, char** argv) {
         printf("Программа отработает в параллельном "
                 "режиме (используемых аппаратных потоков > 1)\n"
         );
+    } else if (HW_THREADS == -1) {
+        printf("Колчество потоков должно быть степенью 2ки и больше 0!");
+        exit(EXIT_FAILURE);
     } else {
         printf("Программа отработает в последовательном "
                 "режиме (используемых аппаратных потоков = 1)\n"
@@ -130,19 +145,14 @@ int main(int argc, char** argv) {
         printf("Рассчёты начаты...\n");
     }
 
-    int* int_array = NULL; // Заполнится и используется только главным процессом
-    if (process_rank == 0) {
-        int_array = CreateArray(ARRAY_SIZE);
-    }
-
     // Цикл выполнения задачи и подсчёта времени её выполнения
     for (int i = 0; i < RUNS; i++) {
 
-        // int* int_array = NULL; // Заполнится и используется только главным процессом
-        // if (process_rank == 0) {
-        //     int_array = CreateArray(ARRAY_SIZE);
-        // }
-        //PrintArray(int_array, ARRAY_SIZE);
+        int* int_array = NULL; // Заполнится и используется только главным процессом
+        if (process_rank == 0) {
+            int_array = CreateArray(ARRAY_SIZE);
+            PrintArray(int_array, ARRAY_SIZE);
+        }
         
         clock_gettime(CLOCK_REALTIME, &begin); // Начало таймера
 
@@ -150,7 +160,12 @@ int main(int argc, char** argv) {
         // Распределение массива
         if (parallel_mode) {
             buffer_array = malloc(sizeof(int) * ARRAY_SIZE/HW_THREADS);
-            MPI_Barrier(MPI_COMM_WORLD); // Для синхронизации
+            if (process_rank == 0) {
+                PrintArray(int_array, ARRAY_SIZE);
+            }
+            //MPI_Barrier(MPI_COMM_WORLD); // Для синхронизации
+            // Scatter обеспечивает, что все процессы получают данные
+            // в порядке по возрастанию их ранга
             MPI_Scatter(int_array, 
                         ARRAY_SIZE/HW_THREADS, 
                         MPI_INT,
@@ -161,60 +176,43 @@ int main(int argc, char** argv) {
                         MPI_COMM_WORLD
             );
         }
-        
-        int64_t sum_result = 0;
-        int64_t final_sum = 0;
-        // Вычисление суммы
+
         if (parallel_mode) {
-            // Cумма в параллельном режиме
-            sum_result = SumElementsOfArray(buffer_array, ARRAY_SIZE/HW_THREADS);
+            // Сортировка подмассива пузырьком
+            BubbleSort(buffer_array, ARRAY_SIZE/HW_THREADS);
             //printf("Сумма процесса %d: %ld \n", process_rank, sum_result);
 
-            int64_t *all_sums = NULL; // Для сбора сумм со всех процессов
-            if (process_rank == 0) {
-                all_sums = malloc(sizeof(int64_t) * HW_THREADS);
-            }
-            MPI_Barrier(MPI_COMM_WORLD); // Для синхронизации
+            //MPI_Barrier(MPI_COMM_WORLD); // Для синхронизации
             // Сбор всех сумм в процессе 0
-            MPI_Gather(&sum_result,
-                        1,
-                        MPI_INT64_T,
-                        all_sums,
-                        1,
-                        MPI_INT64_T,
+            // Gather обеспечивает, что все процессы отправляют данные
+            // в порядке по возрастанию их ранга
+            MPI_Gather(buffer_array,
+                ARRAY_SIZE/HW_THREADS,
+                        MPI_INT,
+                        int_array,
+                        ARRAY_SIZE/HW_THREADS,
+                        MPI_INT,
                         0,
                         MPI_COMM_WORLD
             );
-            // Рассчёт финальной суммы
-            if (process_rank == 0) {
-                final_sum = SumElementsOfArrayINT64(all_sums, HW_THREADS);
-                free(all_sums);
-            }
         } else {
-            // Сумма в последовательном режиме
-            sum_result = SumElementsOfArray(int_array, ARRAY_SIZE);
+            // Сортировка в последовательном режиме
+            BubbleSort(int_array, ARRAY_SIZE);
         }
-        //printf("Результат: %ld \n", sum_result);
-        
-        // Очистка памяти и вывод результатов
+
         if (parallel_mode) {
             free(buffer_array);
         }
-        // if (process_rank == 0) {
-        //     //int64_t test_result = SumElementsOfArray(int_array, ARRAY_SIZE);
-        //     free(int_array);
-
-        //     // if (final_sum == 0) {
-        //     //     final_sum = sum_result;
-        //     // }
-        //     // printf("Финальная сумма прохода %d : %ld (послед. результат: %ld) \n",
-        //     //         i+1, final_sum, test_result
-        //     // );
-        //     //printf("Финальная сумма прохода %d : %ld \n", i+1, final_sum);
-        // }
 
         clock_gettime(CLOCK_REALTIME, &end);
         exec_time += (double)(end.tv_sec - begin.tv_sec) + (double)(end.tv_nsec - begin.tv_nsec)/1e9;
+
+        // Проверка на корректность сортировки 
+        if (process_rank == 0) {
+            CheckSort(int_array, ARRAY_SIZE);
+            PrintArray(int_array, ARRAY_SIZE);
+            free(int_array);
+        }
     }
 
     if (process_rank == 0) {
