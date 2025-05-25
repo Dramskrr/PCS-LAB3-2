@@ -46,9 +46,6 @@ int GetEnvHwThreads() {
     int hw_thread_int = DEFAULT_HW_THREADS;
     if (hw_thread_char != NULL) {
         hw_thread_int = atoi(hw_thread_char);
-        if (hw_thread_int <= 0 || (hw_thread_int & (hw_thread_int - 1)) != 0) {
-            return -1;
-        }
     } else {
         printf(
             "Переменная среды HW_THREADS не получена, "
@@ -97,6 +94,49 @@ void CheckSort(int* arr, const int size) {
     printf("Сортировка успешна \n");
 }
 
+void MergeSubArrays(int* arr, int l, int m, int r) {
+    // Функция для слияния двух массивов
+    // l - индекс начала первого массива
+    // m - индекс конца первого массива
+    // m+1 - индекс начала второго массива
+    // r - индекс конца второго массива
+
+    int i = l; 
+    int j = m+1;
+    int k = 0;
+
+    int size = r-l+1;
+    int temp_arr[size];
+    while (i <= m && j <= r && k < size) {
+        if (arr[i] <= arr[j]) {
+            temp_arr[k] = arr[i];
+            i++;
+        } else {
+            temp_arr[k] = arr[j];
+            j++;
+        }
+        k++;
+    }
+
+    while (i <= m && k < size) { // Дозаполнение
+        temp_arr[k] = arr[i];
+        i++;
+        k++;
+    }
+
+    while (j <= r && k < size) { // Дозаполнение
+        temp_arr[k] = arr[j];
+        j++;
+        k++;
+    }
+
+    k = 0;
+    for (int v = l; v < l+size; v++) {
+        arr[v] = temp_arr[k];
+        k++;
+    }
+}
+
 int main(int argc, char** argv) {
     srand(time(0));
     //srand(1);
@@ -110,9 +150,6 @@ int main(int argc, char** argv) {
         printf("Программа отработает в параллельном "
                 "режиме (используемых аппаратных потоков > 1)\n"
         );
-    } else if (HW_THREADS == -1) {
-        printf("Колчество потоков должно быть степенью 2ки и больше 0!");
-        exit(EXIT_FAILURE);
     } else {
         printf("Программа отработает в последовательном "
                 "режиме (используемых аппаратных потоков = 1)\n"
@@ -151,7 +188,7 @@ int main(int argc, char** argv) {
         int* int_array = NULL; // Заполнится и используется только главным процессом
         if (process_rank == 0) {
             int_array = CreateArray(ARRAY_SIZE);
-            PrintArray(int_array, ARRAY_SIZE);
+            //PrintArray(int_array, ARRAY_SIZE);
         }
         
         clock_gettime(CLOCK_REALTIME, &begin); // Начало таймера
@@ -160,9 +197,6 @@ int main(int argc, char** argv) {
         // Распределение массива
         if (parallel_mode) {
             buffer_array = malloc(sizeof(int) * ARRAY_SIZE/HW_THREADS);
-            if (process_rank == 0) {
-                PrintArray(int_array, ARRAY_SIZE);
-            }
             //MPI_Barrier(MPI_COMM_WORLD); // Для синхронизации
             // Scatter обеспечивает, что все процессы получают данные
             // в порядке по возрастанию их ранга
@@ -175,15 +209,11 @@ int main(int argc, char** argv) {
                         0, 
                         MPI_COMM_WORLD
             );
-        }
-
-        if (parallel_mode) {
             // Сортировка подмассива пузырьком
             BubbleSort(buffer_array, ARRAY_SIZE/HW_THREADS);
             //printf("Сумма процесса %d: %ld \n", process_rank, sum_result);
 
             //MPI_Barrier(MPI_COMM_WORLD); // Для синхронизации
-            // Сбор всех сумм в процессе 0
             // Gather обеспечивает, что все процессы отправляют данные
             // в порядке по возрастанию их ранга
             MPI_Gather(buffer_array,
@@ -195,13 +225,12 @@ int main(int argc, char** argv) {
                         0,
                         MPI_COMM_WORLD
             );
+            //PrintArray(int_array, ARRAY_SIZE);
+            MergeSubArrays(int_array, 0, ARRAY_SIZE/2-1, ARRAY_SIZE-1);
+            free(buffer_array);
         } else {
             // Сортировка в последовательном режиме
             BubbleSort(int_array, ARRAY_SIZE);
-        }
-
-        if (parallel_mode) {
-            free(buffer_array);
         }
 
         clock_gettime(CLOCK_REALTIME, &end);
@@ -210,7 +239,7 @@ int main(int argc, char** argv) {
         // Проверка на корректность сортировки 
         if (process_rank == 0) {
             CheckSort(int_array, ARRAY_SIZE);
-            PrintArray(int_array, ARRAY_SIZE);
+            //PrintArray(int_array, ARRAY_SIZE);
             free(int_array);
         }
     }
