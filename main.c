@@ -106,7 +106,7 @@ void MergeSubArrays(int* arr, int l, int m, int r) {
     int k = 0;
 
     int size = r-l+1;
-    int temp_arr[size];
+    int* temp_arr = malloc(sizeof(int) * size);
     while (i <= m && j <= r && k < size) {
         if (arr[i] <= arr[j]) {
             temp_arr[k] = arr[i];
@@ -135,6 +135,8 @@ void MergeSubArrays(int* arr, int l, int m, int r) {
         arr[v] = temp_arr[k];
         k++;
     }
+
+    free(temp_arr);
 }
 
 int main(int argc, char** argv) {
@@ -226,7 +228,12 @@ int main(int argc, char** argv) {
                         MPI_COMM_WORLD
             );
             //PrintArray(int_array, ARRAY_SIZE);
-            MergeSubArrays(int_array, 0, ARRAY_SIZE/2-1, ARRAY_SIZE-1);
+            // Ленивый и неэффективный алгоритм соединения всех подмассивов
+            // Работает только если массив можно поровну разделить на HW_THREADS частей 
+            for (int i = 1; i < HW_THREADS; i++) {
+                MergeSubArrays(int_array, 0, (ARRAY_SIZE/HW_THREADS)*i-1, (ARRAY_SIZE/HW_THREADS)*(i+1)-1);
+            }
+            
             free(buffer_array);
         } else {
             // Сортировка в последовательном режиме
