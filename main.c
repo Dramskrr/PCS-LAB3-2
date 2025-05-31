@@ -230,8 +230,11 @@ int main(int argc, char** argv) {
             //PrintArray(int_array, ARRAY_SIZE);
             // Ленивый и неэффективный алгоритм соединения всех подмассивов
             // Работает только если массив можно поровну разделить на HW_THREADS частей 
-            for (int i = 1; i < HW_THREADS; i++) {
-                MergeSubArrays(int_array, 0, (ARRAY_SIZE/HW_THREADS)*i-1, (ARRAY_SIZE/HW_THREADS)*(i+1)-1);
+            if (process_rank == 0) {
+                for (int i = 1; i < HW_THREADS; i++) {
+                    MergeSubArrays(int_array, 0, 
+                                (ARRAY_SIZE/HW_THREADS)*i-1, (ARRAY_SIZE/HW_THREADS)*(i+1)-1);
+                }
             }
             
             free(buffer_array);

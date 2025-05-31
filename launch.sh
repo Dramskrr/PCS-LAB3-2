@@ -1,7 +1,7 @@
 #!/bin/bash
 #module load openmpi
 
-export ARRAY_SIZE=100000
+export ARRAY_SIZE=1000
 export RUNS=1
 export HW_THREADS=4
 
