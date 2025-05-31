@@ -2,14 +2,14 @@
 
 export ARRAY_SIZE=2000
 export RUNS=10
-export HW_THREADS=12
+export HW_THREADS=1
 
 #BSUB -J LAB3-2          
 #BSUB -W 00:20             
-#BSUB -n $(HW_THREADS)                       
+#BSUB -n 1
 #BSUB -R "span[ptile=1]"  
-#BSUB -oo logs/output_$(HW_THREADS).out          
-#BSUB -eo logs/error_$(HW_THREADS).err 
+#BSUB -oo logs/output_1.out
+#BSUB -eo logs/error_1.err
 
 module load mpi/openmpi-x86_64
 mpirun --use-hwthread-cpus -np $HW_THREADS ./main
